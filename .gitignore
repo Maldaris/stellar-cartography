@@ -1,0 +1,43 @@
+# .cursor
+.cursor/
+
+# Rust build artifacts
+/target/
+Cargo.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# Data directory - ignore everything except database and cache structure
+data/*
+!data/stellar.db
+!data/cache/
+!data/cache/.gitkeep
+
+# Node.js dependencies and artifacts
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache files (except the tracked cache directory structure)
+data/cache/*
+!data/cache/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp 

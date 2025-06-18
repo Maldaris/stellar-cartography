@@ -1,0 +1,58 @@
+[package]
+name = "stellar-cartography"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web framework with HTTP/2 support
+axum = { version = "0.7", features = ["http2"] }
+tokio = { version = "1.0", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = [
+    "cors", 
+    "compression-gzip",
+    "set-header",
+    "sensitive-headers",
+    "limit",
+    "timeout",
+    "trace"
+] }
+
+# JSON handling
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "migrate"] }
+
+# Spatial indexing
+kiddo = { version = "4.0", features = ["serialize"] }  # High-performance KD-tree
+rstar = "0.12"  # R-tree for spatial queries
+
+# Binary serialization
+bincode = "1.3"  # Fast binary serialization
+sha2 = "0.10"    # SHA-256 hashing for data fingerprinting
+
+# Hash maps and collections
+rustc-hash = "1.1"  # Fast hash maps
+ahash = "0.8"
+
+# Async utilities
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Rate limiting
+tower_governor = { version = "0.3", features = ["axum"] }
+
+# Request tracking
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Configuration
+config = "0.14"
+
+[dev-dependencies]
+tokio-test = "0.4" 
