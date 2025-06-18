@@ -34,6 +34,7 @@ impl Database {
         Ok(Self { pool })
     }
 
+    #[allow(dead_code)]
     pub async fn get_system_name(&self, system_id: u32) -> Result<Option<String>> {
         let row = sqlx::query("SELECT name FROM systems WHERE id = ?")
             .bind(system_id)
@@ -43,6 +44,7 @@ impl Database {
         Ok(row.map(|r| r.get("name")))
     }
 
+    #[allow(dead_code)]
     pub async fn get_region_name(&self, region_id: u32) -> Result<Option<String>> {
         let row = sqlx::query("SELECT name FROM regions WHERE id = ?")
             .bind(region_id)
@@ -52,6 +54,7 @@ impl Database {
         Ok(row.map(|r| r.get("name")))
     }
 
+    #[allow(dead_code)]
     pub async fn get_constellation_name(&self, constellation_id: u32) -> Result<Option<String>> {
         let row = sqlx::query("SELECT name FROM constellations WHERE id = ?")
             .bind(constellation_id)
@@ -61,6 +64,7 @@ impl Database {
         Ok(row.map(|r| r.get("name")))
     }
 
+    #[allow(dead_code)]
     pub async fn search_systems(&self, query: &str, limit: u32) -> Result<Vec<(u32, String)>> {
         let rows = sqlx::query("SELECT id, name FROM systems WHERE name LIKE ? ORDER BY name LIMIT ?")
             .bind(format!("%{}%", query))

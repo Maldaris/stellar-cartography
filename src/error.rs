@@ -10,6 +10,7 @@ use tracing::error;
 #[derive(Debug)]
 pub enum ApiError {
     SystemNotFound(String),
+    #[allow(dead_code)]
     InvalidInput(String),
     DatabaseError(sqlx::Error),
     InternalError(anyhow::Error),

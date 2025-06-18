@@ -1,0 +1,408 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Stellar Cartography API",
+    "description": "A high-performance spatial search engine for EVE Frontier solar systems, providing nearest neighbor queries, radius-based searches, and autocomplete functionality.",
+    "contact": {
+      "name": "VULTUR Project",
+      "url": "https://github.com/Maldaris/stellar-cartography"
+    },
+    "license": {
+      "name": ""
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "operationId": "health_check",
+        "responses": {
+          "200": {
+            "description": "Service health status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/systems/autocomplete": {
+      "get": {
+        "tags": [
+          "systems"
+        ],
+        "operationId": "systems_autocomplete",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Search query for system names",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of suggestions (max 50)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "System name suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutocompleteResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/systems/near": {
+      "get": {
+        "tags": [
+          "systems"
+        ],
+        "operationId": "systems_near",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "description": "System name to search around",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "radius",
+            "in": "query",
+            "description": "Search radius in light years",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Systems near the specified system",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NearbySystemsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "System not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/systems/nearest": {
+      "get": {
+        "tags": [
+          "systems"
+        ],
+        "operationId": "systems_nearest",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "description": "System name to search around",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "k",
+            "in": "query",
+            "description": "Number of nearest systems to return",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Nearest systems to the specified system",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NearestSystemsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "System not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AutocompleteQuery": {
+        "type": "object",
+        "required": [
+          "q"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of suggestions (max 50)",
+            "nullable": true,
+            "minimum": 0
+          },
+          "q": {
+            "type": "string",
+            "description": "Search query for system names"
+          }
+        }
+      },
+      "AutocompleteResponse": {
+        "type": "object",
+        "required": [
+          "suggestions",
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SystemSuggestion"
+            }
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "service",
+          "version"
+        ],
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "NearbyQuery": {
+        "type": "object",
+        "required": [
+          "name",
+          "radius"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "System name to search around"
+          },
+          "radius": {
+            "type": "number",
+            "format": "double",
+            "description": "Search radius in light years"
+          }
+        }
+      },
+      "NearbySystemsResponse": {
+        "type": "object",
+        "required": [
+          "center_system",
+          "nearby_systems",
+          "radius",
+          "total_found"
+        ],
+        "properties": {
+          "center_system": {
+            "$ref": "#/components/schemas/SystemInfo"
+          },
+          "nearby_systems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SystemInfo"
+            }
+          },
+          "radius": {
+            "type": "number",
+            "format": "double"
+          },
+          "total_found": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "NearestQuery": {
+        "type": "object",
+        "required": [
+          "name",
+          "k"
+        ],
+        "properties": {
+          "k": {
+            "type": "integer",
+            "description": "Number of nearest systems to return",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "description": "System name to search around"
+          }
+        }
+      },
+      "NearestSystemsResponse": {
+        "type": "object",
+        "required": [
+          "center_system",
+          "nearest_systems",
+          "k"
+        ],
+        "properties": {
+          "center_system": {
+            "$ref": "#/components/schemas/SystemInfo"
+          },
+          "k": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nearest_systems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SystemInfo"
+            }
+          }
+        }
+      },
+      "SystemInfo": {
+        "type": "object",
+        "required": [
+          "id",
+          "center"
+        ],
+        "properties": {
+          "center": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "constellation_id": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "minimum": 0
+          },
+          "distance": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "faction_id": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "minimum": 0
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "region_id": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true,
+            "minimum": 0
+          }
+        }
+      },
+      "SystemSuggestion": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "constellation_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "region_name": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "systems",
+      "description": "Solar system spatial queries and search"
+    },
+    {
+      "name": "health",
+      "description": "Service health monitoring"
+    }
+  ]
+}

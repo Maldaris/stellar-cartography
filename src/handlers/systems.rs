@@ -15,6 +15,19 @@ use crate::{
     AppState,
 };
 
+#[utoipa::path(
+    get,
+    path = "/systems/near",
+    params(
+        NearbyQuery
+    ),
+    responses(
+        (status = 200, description = "Systems near the specified system", body = NearbySystemsResponse),
+        (status = 404, description = "System not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "systems"
+)]
 pub async fn systems_near(
     Query(params): Query<NearbyQuery>,
     State(state): State<AppState>,
@@ -81,6 +94,19 @@ pub async fn systems_near(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/systems/nearest",
+    params(
+        NearestQuery
+    ),
+    responses(
+        (status = 200, description = "Nearest systems to the specified system", body = NearestSystemsResponse),
+        (status = 404, description = "System not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "systems"
+)]
 pub async fn systems_nearest(
     Query(params): Query<NearestQuery>,
     State(state): State<AppState>,
@@ -139,6 +165,18 @@ pub async fn systems_nearest(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/systems/autocomplete",
+    params(
+        AutocompleteQuery
+    ),
+    responses(
+        (status = 200, description = "System name suggestions", body = AutocompleteResponse),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "systems"
+)]
 pub async fn systems_autocomplete(
     Query(params): Query<AutocompleteQuery>,
     State(state): State<AppState>,

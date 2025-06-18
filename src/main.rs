@@ -7,6 +7,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tracing::{info, Level};
 use tracing_subscriber;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
+use serde_json;
 
 mod spatial;
 mod models;
@@ -19,6 +22,51 @@ use handlers::{health, systems};
 use spatial::SpatialIndex;
 use database::Database;
 
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        // System endpoints
+        systems::systems_near,
+        systems::systems_nearest,
+        systems::systems_autocomplete,
+        
+        // Health endpoint
+        health::health_check,
+    ),
+    components(
+        schemas(
+            // Response models
+            models::NearbySystemsResponse,
+            models::NearestSystemsResponse,
+            models::AutocompleteResponse,
+            models::SystemInfo,
+            models::SystemSuggestion,
+            
+            // Query models
+            models::NearbyQuery,
+            models::NearestQuery,
+            models::AutocompleteQuery,
+            
+            // Health response
+            health::HealthResponse,
+        )
+    ),
+    tags(
+        (name = "systems", description = "Solar system spatial queries and search"),
+        (name = "health", description = "Service health monitoring")
+    ),
+    info(
+        title = "Stellar Cartography API",
+        version = "0.1.0",
+        description = "A high-performance spatial search engine for EVE Frontier solar systems, providing nearest neighbor queries, radius-based searches, and autocomplete functionality.",
+        contact(
+            name = "VULTUR Project",
+            url = "https://github.com/Maldaris/stellar-cartography"
+        )
+    )
+)]
+struct ApiDoc;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize tracing
@@ -27,6 +75,11 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     info!("Starting stellar cartography API server");
+
+    // Generate OpenAPI JSON file for reference
+    let openapi_json = serde_json::to_string_pretty(&ApiDoc::openapi()).unwrap();
+    std::fs::write("openapi.json", &openapi_json)?;
+    info!("OpenAPI specification written to openapi.json");
 
     // Initialize database
     let db = Database::new("data/stellar.db").await?;
@@ -62,6 +115,9 @@ async fn main() -> anyhow::Result<()> {
     app = app.layer(middleware::security::body_limit_layer());
     app = app.layer(middleware::security::cors_layer());
 
+    // Add Swagger UI routes
+    app = app.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()));
+
     // Run it with hyper on localhost:3000
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     info!("API server listening on {}", addr);
@@ -74,6 +130,7 @@ async fn main() -> anyhow::Result<()> {
 
 #[derive(Clone)]
 struct AppState {
+    #[allow(dead_code)]
     database: Database,
     spatial_index: Arc<SpatialIndex>,
 } 

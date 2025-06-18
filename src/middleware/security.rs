@@ -95,6 +95,7 @@ pub fn cors_layer() -> CorsLayer {
 }
 
 /// Additional security middleware for sensitive headers
+#[allow(dead_code)]
 pub fn sensitive_headers_layer() -> SetSensitiveHeadersLayer {
     SetSensitiveHeadersLayer::new([
         header::AUTHORIZATION,

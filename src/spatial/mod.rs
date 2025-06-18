@@ -218,10 +218,12 @@ impl SpatialIndex {
         self.systems.get(&id)
     }
 
+    #[allow(dead_code)]
     pub fn get_region(&self, id: u32) -> Option<&Region> {
         self.regions.get(&id)
     }
 
+    #[allow(dead_code)]
     pub fn get_constellation(&self, id: u32) -> Option<&Constellation> {
         self.constellations.get(&id)
     }
