@@ -89,15 +89,19 @@ async fn main() -> anyhow::Result<()> {
     let spatial_index = Arc::new(SpatialIndex::load_with_cache(&db, "data/json", "data/cache/spatial_index.bin").await?);
     info!("Loaded {} systems into spatial index", spatial_index.system_count());
 
+    // Get path prefix from environment variable
+    let path_prefix = std::env::var("PATH_PREFIX").unwrap_or_default();
+    info!("Using path prefix: '{}'", path_prefix);
+    
     // Build our application with routes
     let mut app = Router::new()
         // Health check - no rate limit
-        .route("/health", get(health::health_check))
+        .route(&format!("{}/health", path_prefix), get(health::health_check))
         // System routes
-        .route("/systems/near", get(systems::systems_near))
-        .route("/systems/nearest", get(systems::systems_nearest))
+        .route(&format!("{}/systems/near", path_prefix), get(systems::systems_near))
+        .route(&format!("{}/systems/nearest", path_prefix), get(systems::systems_nearest))
         // Autocomplete
-        .route("/systems/autocomplete", get(systems::systems_autocomplete))
+        .route(&format!("{}/systems/autocomplete", path_prefix), get(systems::systems_autocomplete))
         .with_state(AppState {
             database: db,
             spatial_index,
@@ -118,8 +122,8 @@ async fn main() -> anyhow::Result<()> {
     // Add Swagger UI routes
     app = app.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()));
 
-    // Run it with hyper on localhost:3000
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    // Run it with hyper on all interfaces:3000
+    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     info!("API server listening on {}", addr);
     
     let listener = tokio::net::TcpListener::bind(addr).await?;

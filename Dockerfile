@@ -43,6 +43,10 @@ RUN addgroup -g 1000 appuser && \
     adduser -D -s /bin/sh -u 1000 -G appuser appuser && \
     chown -R appuser:appuser /app
 
+# set database permissions to allow read/write to new user
+RUN chown appuser:appuser data/stellar.db
+RUN chown appuser:appuser data/cache
+
 USER appuser
 
 # Expose port
