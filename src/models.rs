@@ -43,17 +43,36 @@ pub struct Region {
 pub struct SystemInfo {
     pub id: u32,
     pub name: Option<String>,
+    /// Coordinates in meters from galactic center [x, y, z]
     pub center: [f64; 3],
     pub region_id: Option<u32>,
     pub constellation_id: Option<u32>,
     pub faction_id: Option<u32>,
+    /// Distance from query center in light-years
     pub distance: Option<f64>,
+}
+
+// Simplified system data for bulk map requests
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SystemMapData {
+    pub id: u32,
+    pub name: String,
+    pub center: [f64; 3],
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct BulkSystemsResponse {
+    pub systems: Vec<SystemMapData>,
+    pub total_count: usize,
+    pub offset: usize,
+    pub limit: usize,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct NearbySystemsResponse {
     pub center_system: SystemInfo,
     pub nearby_systems: Vec<SystemInfo>,
+    /// Search radius in light-years
     pub radius: f64,
     pub total_found: usize,
 }
@@ -102,4 +121,12 @@ pub struct AutocompleteQuery {
     pub q: String,
     /// Maximum number of suggestions (max 50)
     pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
+pub struct BulkSystemsQuery {
+    /// Maximum number of systems to return (default: 1000, max: 5000)
+    pub limit: Option<usize>,
+    /// Offset for pagination (default: 0)
+    pub offset: Option<usize>,
 } 

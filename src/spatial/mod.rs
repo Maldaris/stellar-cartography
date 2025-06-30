@@ -242,6 +242,10 @@ impl SpatialIndex {
         self.systems.len()
     }
 
+    pub fn get_all_system_ids(&self) -> Vec<SystemId> {
+        self.systems.keys().copied().collect()
+    }
+
     pub async fn save_to_binary(&self, file_path: &str, data_dir: &str) -> Result<()> {
         info!("Saving spatial index to binary file: {}", file_path);
         

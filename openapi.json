@@ -81,6 +81,53 @@
         }
       }
     },
+    "/systems/bulk": {
+      "get": {
+        "tags": [
+          "systems"
+        ],
+        "operationId": "systems_bulk",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of systems to return (default: 1000, max: 5000)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Offset for pagination (default: 0)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bulk system data for map visualization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkSystemsResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
     "/systems/near": {
       "get": {
         "tags": [
@@ -110,7 +157,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Systems near the specified system",
+            "description": "Systems near the specified system (distances in light-years)",
             "content": {
               "application/json": {
                 "schema": {
@@ -157,7 +204,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Nearest systems to the specified system",
+            "description": "Nearest systems to the specified system (distances in light-years)",
             "content": {
               "application/json": {
                 "schema": {
@@ -211,6 +258,52 @@
             "items": {
               "$ref": "#/components/schemas/SystemSuggestion"
             }
+          }
+        }
+      },
+      "BulkSystemsQuery": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of systems to return (default: 1000, max: 5000)",
+            "nullable": true,
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Offset for pagination (default: 0)",
+            "nullable": true,
+            "minimum": 0
+          }
+        }
+      },
+      "BulkSystemsResponse": {
+        "type": "object",
+        "required": [
+          "systems",
+          "total_count",
+          "offset",
+          "limit"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "systems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SystemMapData"
+            }
+          },
+          "total_count": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },
@@ -271,7 +364,8 @@
           },
           "radius": {
             "type": "number",
-            "format": "double"
+            "format": "double",
+            "description": "Search radius in light-years"
           },
           "total_found": {
             "type": "integer",
@@ -332,7 +426,8 @@
             "items": {
               "type": "number",
               "format": "double"
-            }
+            },
+            "description": "Coordinates in meters from galactic center [x, y, z]"
           },
           "constellation_id": {
             "type": "integer",
@@ -343,6 +438,7 @@
           "distance": {
             "type": "number",
             "format": "double",
+            "description": "Distance from query center in light-years",
             "nullable": true
           },
           "faction_id": {
@@ -365,6 +461,31 @@
             "format": "int32",
             "nullable": true,
             "minimum": 0
+          }
+        }
+      },
+      "SystemMapData": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "center"
+        ],
+        "properties": {
+          "center": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
           }
         }
       },

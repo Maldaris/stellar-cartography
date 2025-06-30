@@ -17,6 +17,7 @@ mod handlers;
 mod database;
 mod error;
 mod middleware;
+pub mod coordinates;
 
 use handlers::{health, systems};
 use spatial::SpatialIndex;
@@ -29,6 +30,7 @@ use database::Database;
         systems::systems_near,
         systems::systems_nearest,
         systems::systems_autocomplete,
+        systems::systems_bulk,
         
         // Health endpoint
         health::health_check,
@@ -39,13 +41,16 @@ use database::Database;
             models::NearbySystemsResponse,
             models::NearestSystemsResponse,
             models::AutocompleteResponse,
+            models::BulkSystemsResponse,
             models::SystemInfo,
             models::SystemSuggestion,
+            models::SystemMapData,
             
             // Query models
             models::NearbyQuery,
             models::NearestQuery,
             models::AutocompleteQuery,
+            models::BulkSystemsQuery,
             
             // Health response
             health::HealthResponse,
@@ -102,6 +107,7 @@ async fn main() -> anyhow::Result<()> {
         .route(&format!("{}/systems/nearest", path_prefix), get(systems::systems_nearest))
         // Autocomplete
         .route(&format!("{}/systems/autocomplete", path_prefix), get(systems::systems_autocomplete))
+        .route(&format!("{}/systems/bulk", path_prefix), get(systems::systems_bulk))
         .with_state(AppState {
             database: db,
             spatial_index,
