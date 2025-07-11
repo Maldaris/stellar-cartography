@@ -8,7 +8,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::RequestId,
     models::{
-        NearbyQuery, NearestQuery, AutocompleteQuery, BulkSystemsQuery,
+        NearbyQuery, NearestQuery, AutocompleteQuery, SystemLookupQuery, BulkSystemsQuery,
         NearbySystemsResponse, NearestSystemsResponse, AutocompleteResponse, BulkSystemsResponse,
         SystemInfo, SystemSuggestion, SystemMapData,
     },
@@ -211,6 +211,47 @@ pub async fn systems_autocomplete(
         suggestions,
         query: params.q,
     }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/systems/lookup",
+    params(
+        SystemLookupQuery
+    ),
+    responses(
+        (status = 200, description = "System information by ID", body = SystemInfo),
+        (status = 404, description = "System not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "systems"
+)]
+pub async fn systems_lookup(
+    Query(params): Query<SystemLookupQuery>,
+    State(state): State<AppState>,
+) -> ApiResult<Json<SystemInfo>> {
+    info!("Looking up system with ID: {}", params.id);
+
+    // Get system data
+    let system_data = state
+        .spatial_index
+        .get_system(params.id)
+        .ok_or_else(|| ApiError::SystemNotFound(params.id.to_string()))?;
+
+    // Get system name
+    let system_name = state.spatial_index.get_system_name(params.id).cloned();
+
+    let system_info = SystemInfo {
+        id: params.id,
+        name: system_name,
+        center: system_data.center,
+        region_id: system_data.region_id,
+        constellation_id: system_data.constellation_id,
+        faction_id: system_data.faction_id,
+        distance: None, // No distance calculation for direct lookup
+    };
+
+    Ok(Json(system_info))
 }
 
 #[utoipa::path(

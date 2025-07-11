@@ -30,6 +30,7 @@ use database::Database;
         systems::systems_near,
         systems::systems_nearest,
         systems::systems_autocomplete,
+        systems::systems_lookup,
         systems::systems_bulk,
         
         // Health endpoint
@@ -50,6 +51,7 @@ use database::Database;
             models::NearbyQuery,
             models::NearestQuery,
             models::AutocompleteQuery,
+            models::SystemLookupQuery,
             models::BulkSystemsQuery,
             
             // Health response
@@ -107,6 +109,7 @@ async fn main() -> anyhow::Result<()> {
         .route(&format!("{}/systems/nearest", path_prefix), get(systems::systems_nearest))
         // Autocomplete
         .route(&format!("{}/systems/autocomplete", path_prefix), get(systems::systems_autocomplete))
+        .route(&format!("{}/systems/lookup", path_prefix), get(systems::systems_lookup))
         .route(&format!("{}/systems/bulk", path_prefix), get(systems::systems_bulk))
         .with_state(AppState {
             database: db,

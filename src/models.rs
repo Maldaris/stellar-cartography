@@ -124,6 +124,12 @@ pub struct AutocompleteQuery {
 }
 
 #[derive(Debug, Deserialize, ToSchema, IntoParams)]
+pub struct SystemLookupQuery {
+    /// System ID to look up
+    pub id: u32,
+}
+
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
 pub struct BulkSystemsQuery {
     /// Maximum number of systems to return (default: 1000, max: 5000)
     pub limit: Option<usize>,

@@ -37,6 +37,7 @@ yarn-error.log*
 # Cache files (except the tracked cache directory structure)
 data/cache/*
 !data/cache/.gitkeep
+pyd/
 
 # Temporary files
 *.tmp
