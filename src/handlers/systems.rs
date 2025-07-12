@@ -9,8 +9,10 @@ use crate::{
     middleware::RequestId,
     models::{
         NearbyQuery, NearestQuery, AutocompleteQuery, SystemLookupQuery, BulkSystemsQuery,
+        SystemHierarchyQuery, BulkConnectionsQuery,
         NearbySystemsResponse, NearestSystemsResponse, AutocompleteResponse, BulkSystemsResponse,
-        SystemInfo, SystemSuggestion, SystemMapData,
+        SystemInfo, SystemSuggestion, SystemMapData, SystemHierarchy, BulkConnectionsResponse,
+        CompleteSystemHierarchy,
     },
     coordinates::Distance,
     AppState,
@@ -66,7 +68,7 @@ pub async fn systems_near(
         center: center_system_data.center,
         region_id: center_system_data.region_id,
         constellation_id: center_system_data.constellation_id,
-        faction_id: center_system_data.faction_id,
+        faction_id: center_system_data.metadata.faction_id,
         distance: Some(0.0),
     };
 
@@ -83,7 +85,7 @@ pub async fn systems_near(
                     center: sys.center,
                     region_id: sys.region_id,
                     constellation_id: sys.constellation_id,
-                    faction_id: sys.faction_id,
+                    faction_id: sys.metadata.faction_id,
                     distance: Some(distance_ly),
                 }
             })
@@ -143,7 +145,7 @@ pub async fn systems_nearest(
         center: center_system_data.center,
         region_id: center_system_data.region_id,
         constellation_id: center_system_data.constellation_id,
-        faction_id: center_system_data.faction_id,
+        faction_id: center_system_data.metadata.faction_id,
         distance: Some(0.0),
     };
 
@@ -161,7 +163,7 @@ pub async fn systems_nearest(
                     center: sys.center,
                     region_id: sys.region_id,
                     constellation_id: sys.constellation_id,
-                    faction_id: sys.faction_id,
+                    faction_id: sys.metadata.faction_id,
                     distance: Some(distance_ly),
                 }
             })
@@ -247,7 +249,7 @@ pub async fn systems_lookup(
         center: system_data.center,
         region_id: system_data.region_id,
         constellation_id: system_data.constellation_id,
-        faction_id: system_data.faction_id,
+        faction_id: system_data.metadata.faction_id,
         distance: None, // No distance calculation for direct lookup
     };
 
@@ -308,6 +310,102 @@ pub async fn systems_bulk(
 
     Ok(Json(BulkSystemsResponse {
         systems,
+        total_count,
+        offset,
+        limit,
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/systems/hierarchy",
+    params(
+        SystemHierarchyQuery
+    ),
+    responses(
+        (status = 200, description = "System hierarchy information (system -> constellation -> region)", body = SystemHierarchy),
+        (status = 404, description = "System not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "systems"
+)]
+pub async fn system_hierarchy(
+    Query(params): Query<SystemHierarchyQuery>,
+    State(state): State<AppState>,
+) -> ApiResult<Json<SystemHierarchy>> {
+    info!("Getting hierarchy for system ID: {}", params.id);
+
+    let hierarchy = state
+        .database
+        .get_system_hierarchy(params.id)
+        .await
+        .map_err(|e| ApiError::InternalError(e))?
+        .ok_or_else(|| ApiError::SystemNotFound(params.id.to_string()))?;
+
+    Ok(Json(hierarchy))
+}
+
+#[utoipa::path(
+    get,
+    path = "/systems/hierarchy/complete",
+    params(
+        SystemHierarchyQuery
+    ),
+    responses(
+        (status = 200, description = "Complete system hierarchy with all related systems and constellations", body = CompleteSystemHierarchy),
+        (status = 404, description = "System not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "systems"
+)]
+pub async fn complete_system_hierarchy(
+    Query(params): Query<SystemHierarchyQuery>,
+    State(state): State<AppState>,
+) -> ApiResult<Json<CompleteSystemHierarchy>> {
+    info!("Getting complete hierarchy for system ID: {}", params.id);
+
+    let hierarchy = state
+        .database
+        .get_complete_system_hierarchy(params.id)
+        .await
+        .map_err(|e| ApiError::InternalError(e))?
+        .ok_or_else(|| ApiError::SystemNotFound(params.id.to_string()))?;
+
+    Ok(Json(hierarchy))
+}
+
+#[utoipa::path(
+    get,
+    path = "/systems/connections/bulk",
+    params(
+        BulkConnectionsQuery
+    ),
+    responses(
+        (status = 200, description = "Bulk gate connections with pagination", body = BulkConnectionsResponse),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "systems"
+)]
+pub async fn systems_connections_bulk(
+    Query(params): Query<BulkConnectionsQuery>,
+    State(state): State<AppState>,
+) -> ApiResult<Json<BulkConnectionsResponse>> {
+    let limit = params.limit.unwrap_or(1000).min(10000); // Cap at 10000 connections
+    let offset = params.offset.unwrap_or(0);
+
+    info!(
+        "Getting bulk connections: limit={}, offset={}, type filter: {:?}",
+        limit, offset, params.connection_type
+    );
+
+    let (connections, total_count) = state
+        .database
+        .get_all_connections(limit, offset, params.connection_type.as_deref())
+        .await
+        .map_err(|e| ApiError::InternalError(e))?;
+
+    Ok(Json(BulkConnectionsResponse {
+        connections,
         total_count,
         offset,
         limit,

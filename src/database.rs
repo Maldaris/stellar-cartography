@@ -4,7 +4,7 @@ use tokio::fs;
 use tracing::{info, warn};
 use serde_json;
 use std::path::Path;
-use crate::models::{SolarSystem, Constellation};
+use crate::models::{SolarSystem, Constellation, SystemHierarchy, SystemInfo, RegionInfo, ConstellationInfo, GateConnection, SystemConnections, CompleteSystemHierarchy, ConstellationWithSystems, RegionWithConstellations, SecurityInfo, CelestialInfo, NavigationInfo, SystemMetadata, ConstellationMetadata};
 
 #[derive(Clone)]
 pub struct Database {
@@ -80,7 +80,9 @@ impl Database {
 
     pub async fn load_all_systems(&self) -> Result<Vec<(u32, SolarSystem, String)>> {
         let rows = sqlx::query(
-            "SELECT id, name, center_x, center_y, center_z, region_id, constellation_id, faction_id 
+            "SELECT id, name, center_x, center_y, center_z, region_id, constellation_id, faction_id,
+                    security_class, security_status, star_id, planet_ids, planet_count_by_type,
+                    neighbours, stargates, sovereignty, disallowed_anchor_categories, disallowed_anchor_groups
              FROM systems ORDER BY id"
         )
         .fetch_all(&self.pool)
@@ -97,14 +99,56 @@ impl Database {
             let constellation_id: Option<u32> = row.get("constellation_id");
             let faction_id: Option<u32> = row.get("faction_id");
 
+            // Parse JSON fields with fallbacks
+            let planet_ids: Vec<u32> = row.get::<Option<String>, _>("planet_ids")
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+            
+            let planet_count_by_type: std::collections::HashMap<String, u32> = row.get::<Option<String>, _>("planet_count_by_type")
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+            
+            let neighbours: Vec<u32> = row.get::<Option<String>, _>("neighbours")
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+            
+            let stargates: Vec<u32> = row.get::<Option<String>, _>("stargates")
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+            
+            let disallowed_anchor_categories: Vec<String> = row.get::<Option<String>, _>("disallowed_anchor_categories")
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+            
+            let disallowed_anchor_groups: Vec<String> = row.get::<Option<String>, _>("disallowed_anchor_groups")
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+
             let system = SolarSystem {
+                id,
+                name: name.clone(),
                 center: [center_x, center_y, center_z],
                 region_id,
                 constellation_id,
-                faction_id,
-                planet_item_ids: Vec::new(), // We might not store this in DB
-                planet_count_by_type: std::collections::HashMap::new(),
-                neighbours: Vec::new(), // We might not store this in DB
+                security: SecurityInfo {
+                    class: row.get("security_class"),
+                    status: row.get("security_status"),
+                },
+                celestials: CelestialInfo {
+                    star_id: row.get("star_id"),
+                    planet_ids,
+                    planet_count_by_type,
+                },
+                navigation: NavigationInfo {
+                    neighbours,
+                    stargates,
+                },
+                metadata: SystemMetadata {
+                    faction_id,
+                    sovereignty: row.get("sovereignty"),
+                    disallowed_anchor_categories,
+                    disallowed_anchor_groups,
+                },
             };
 
             systems.push((id, system, name));
@@ -150,18 +194,18 @@ impl Database {
         }
 
         // Check file modification times
-        let starmap_path = Path::new(data_dir).join("starmapcache.json");
+        let stellar_cartography_path = Path::new(data_dir).join("stellar_cartography.json");
         let labels_path = Path::new(data_dir).join("stellar_labels.json");
         
-        if !starmap_path.exists() || !labels_path.exists() {
+        if !stellar_cartography_path.exists() || !labels_path.exists() {
             warn!("Required data files missing, database may be outdated");
             return Ok(false); // Don't update if source files are missing
         }
 
         // Get the most recent modification time of our source files
-        let starmap_modified = fs::metadata(&starmap_path).await?.modified()?;
+        let stellar_cartography_modified = fs::metadata(&stellar_cartography_path).await?.modified()?;
         let labels_modified = fs::metadata(&labels_path).await?.modified()?;
-        let latest_file_time = starmap_modified.max(labels_modified);
+        let latest_file_time = stellar_cartography_modified.max(labels_modified);
 
         // Check when the database was last updated (using a metadata table)
         let last_update: Option<String> = sqlx::query_scalar(
@@ -197,6 +241,7 @@ impl Database {
 
         // Clear existing data in a transaction
         let mut tx = self.pool.begin().await?;
+        sqlx::query("DELETE FROM gate_connections").execute(&mut *tx).await?;
         sqlx::query("DELETE FROM systems").execute(&mut *tx).await?;
         sqlx::query("DELETE FROM constellations").execute(&mut *tx).await?;
         sqlx::query("DELETE FROM regions").execute(&mut *tx).await?;
@@ -212,17 +257,24 @@ impl Database {
         let region_labels = labels.get("regions").and_then(|r| r.as_object()).unwrap_or(&empty_map);
         let constellation_labels = labels.get("constellations").and_then(|c| c.as_object()).unwrap_or(&empty_map);
 
-        // Load starmap data
-        let starmap_path = Path::new(data_dir).join("starmapcache.json");
-        let starmap_content = fs::read_to_string(&starmap_path).await?;
-        let starmap: serde_json::Value = serde_json::from_str(&starmap_content)?;
+        // Load stellar cartography data
+        let stellar_cartography_path = Path::new(data_dir).join("stellar_cartography.json");
+        let stellar_cartography_content = fs::read_to_string(&stellar_cartography_path).await?;
+        let starmap: serde_json::Value = serde_json::from_str(&stellar_cartography_content)?;
+
+        // Debug: Log the top-level keys in the JSON
+        if let Some(obj) = starmap.as_object() {
+            info!("Top-level keys in stellar_cartography.json: {:?}", obj.keys().collect::<Vec<_>>());
+        }
 
         let mut systems_inserted = 0;
         let mut regions_inserted = 0;
         let mut constellations_inserted = 0;
+        let mut connections_inserted = 0;
 
         // Insert regions
         if let Some(regions_data) = starmap.get("regions").and_then(|r| r.as_object()) {
+            info!("Found {} regions in data", regions_data.len());
             for (id_str, _region_data) in regions_data {
                 if let Ok(region_id) = id_str.parse::<u32>() {
                     let default_name = format!("Region_{}", region_id);
@@ -239,57 +291,120 @@ impl Database {
                     regions_inserted += 1;
                 }
             }
+        } else {
+            warn!("No regions found in stellar cartography data or not an object");
         }
 
         // Insert constellations
         if let Some(constellations_data) = starmap.get("constellations").and_then(|c| c.as_object()) {
+            info!("Found {} constellations in data", constellations_data.len());
             for (id_str, constellation_data) in constellations_data {
                 if let Ok(constellation_id) = id_str.parse::<u32>() {
-                    if let Ok(constellation) = serde_json::from_value::<Constellation>(constellation_data.clone()) {
-                        let default_name = format!("Constellation_{}", constellation_id);
-                        let name = constellation_labels.get(&constellation_id.to_string())
-                            .and_then(|n| n.as_str())
-                            .unwrap_or(&default_name);
+                    match serde_json::from_value::<Constellation>(constellation_data.clone()) {
+                        Ok(constellation) => {
+                            let name = constellation_labels.get(&constellation_id.to_string())
+                                .and_then(|n| n.as_str())
+                                .unwrap_or(&constellation.name);
 
-                        sqlx::query("INSERT INTO constellations (id, name, region_id) VALUES (?, ?, ?)")
-                            .bind(constellation_id)
-                            .bind(name)
-                            .bind(constellation.region_id)
-                            .execute(&self.pool)
-                            .await?;
-                        
-                        constellations_inserted += 1;
+                            sqlx::query("INSERT INTO constellations (id, name, region_id, solar_system_ids, constellation_faction_id, constellation_sovereignty) VALUES (?, ?, ?, ?, ?, ?)")
+                                .bind(constellation_id)
+                                .bind(name)
+                                .bind(constellation.region_id)
+                                .bind(serde_json::to_string(&constellation.solar_system_ids).unwrap_or_default())
+                                .bind(constellation.metadata.faction_id)
+                                .bind(constellation.metadata.sovereignty)
+                                .execute(&self.pool)
+                                .await?;
+                            
+                            constellations_inserted += 1;
+                        }
+                        Err(e) => {
+                            warn!("Failed to parse constellation {}: {}", constellation_id, e);
+                        }
                     }
                 }
             }
+        } else {
+            warn!("No constellations found in stellar cartography data or not an object");
         }
 
         // Insert systems
-        if let Some(systems_data) = starmap.get("solarSystems").and_then(|s| s.as_object()) {
+        if let Some(systems_data) = starmap.get("systems").and_then(|s| s.as_object()) {
+            info!("Found {} systems in data", systems_data.len());
             for (id_str, system_data) in systems_data {
                 if let Ok(system_id) = id_str.parse::<u32>() {
-                    if let Ok(system) = serde_json::from_value::<SolarSystem>(system_data.clone()) {
-                        let default_name = format!("System_{}", system_id);
-                        let name = system_labels.get(&system_id.to_string())
-                            .and_then(|n| n.as_str())
-                            .unwrap_or(&default_name);
+                    match serde_json::from_value::<SolarSystem>(system_data.clone()) {
+                        Ok(system) => {
+                            let name = system_labels.get(&system_id.to_string())
+                                .and_then(|n| n.as_str())
+                                .unwrap_or(&system.name);
 
-                        sqlx::query(
-                            "INSERT INTO systems (id, name, center_x, center_y, center_z, region_id, constellation_id, faction_id) 
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-                        )
-                        .bind(system_id)
-                        .bind(name)
-                        .bind(system.center[0])
-                        .bind(system.center[1])
-                        .bind(system.center[2])
-                        .bind(system.region_id)
-                        .bind(system.constellation_id)
-                        .bind(system.faction_id)
-                        .execute(&self.pool)
-                        .await?;
-                        
-                        systems_inserted += 1;
+                            sqlx::query(
+                                "INSERT INTO systems (id, name, center_x, center_y, center_z, region_id, constellation_id, faction_id,
+                                                    security_class, security_status, star_id, planet_ids, planet_count_by_type,
+                                                    neighbours, stargates, sovereignty, disallowed_anchor_categories, disallowed_anchor_groups) 
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                            )
+                            .bind(system_id)
+                            .bind(name)
+                            .bind(system.center[0])
+                            .bind(system.center[1])
+                            .bind(system.center[2])
+                            .bind(system.region_id)
+                            .bind(system.constellation_id)
+                            .bind(system.metadata.faction_id)
+                            .bind(system.security.class)
+                            .bind(system.security.status)
+                            .bind(system.celestials.star_id)
+                            .bind(serde_json::to_string(&system.celestials.planet_ids).unwrap_or_default())
+                            .bind(serde_json::to_string(&system.celestials.planet_count_by_type).unwrap_or_default())
+                            .bind(serde_json::to_string(&system.navigation.neighbours).unwrap_or_default())
+                            .bind(serde_json::to_string(&system.navigation.stargates).unwrap_or_default())
+                            .bind(system.metadata.sovereignty)
+                            .bind(serde_json::to_string(&system.metadata.disallowed_anchor_categories).unwrap_or_default())
+                            .bind(serde_json::to_string(&system.metadata.disallowed_anchor_groups).unwrap_or_default())
+                            .execute(&self.pool)
+                            .await?;
+                            
+                            systems_inserted += 1;
+                        }
+                        Err(e) => {
+                            warn!("Failed to parse system {}: {}", system_id, e);
+                        }
+                    }
+                }
+            }
+        } else {
+            warn!("No systems found in stellar cartography data or not an object");
+        }
+
+        // Insert gate connections
+        if let Some(systems_data) = starmap.get("systems").and_then(|s| s.as_object()) {
+            for (id_str, system_data) in systems_data {
+                if let Ok(from_system_id) = id_str.parse::<u32>() {
+                    match serde_json::from_value::<SolarSystem>(system_data.clone()) {
+                        Ok(system) => {
+                            // Use navigation.neighbours from the new structure
+                            for to_system_id in &system.navigation.neighbours {
+                                // Insert bidirectional connection (only if from_system_id <= to_system_id to avoid duplicates)
+                                if from_system_id <= *to_system_id {
+                                    sqlx::query(
+                                        "INSERT INTO gate_connections (from_system_id, to_system_id, connection_type) 
+                                         VALUES (?, ?, ?)"
+                                    )
+                                    .bind(from_system_id)
+                                    .bind(*to_system_id)
+                                    .bind("stargate")
+                                    .execute(&self.pool)
+                                    .await?;
+                                    
+                                    connections_inserted += 1;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to parse system {} for connections: {}", from_system_id, e);
+                        }
                     }
                 }
             }
@@ -309,10 +424,392 @@ impl Database {
         .await?;
 
         info!(
-            "Database seeded successfully: {} systems, {} regions, {} constellations",
-            systems_inserted, regions_inserted, constellations_inserted
+            "Database seeded successfully: {} systems, {} regions, {} constellations, {} gate connections",
+            systems_inserted, regions_inserted, constellations_inserted, connections_inserted
         );
 
         Ok(())
+    }
+
+    /// Get complete hierarchical information for a system (system -> constellation -> region)
+    pub async fn get_system_hierarchy(&self, system_id: u32) -> Result<Option<SystemHierarchy>> {
+        let row = sqlx::query(
+            "SELECT s.id, s.name as system_name, s.x, s.y, s.z, s.region_id, s.constellation_id, s.faction_id,
+                    c.name as constellation_name, c.region_id as constellation_region_id,
+                    r.name as region_name
+             FROM systems s
+             LEFT JOIN constellations c ON s.constellation_id = c.id
+             LEFT JOIN regions r ON s.region_id = r.id
+             WHERE s.id = ?"
+        )
+        .bind(system_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            let system = SystemInfo {
+                id: row.get("id"),
+                name: row.get("system_name"),
+                center: [
+                    row.get::<Option<f64>, _>("x").unwrap_or(0.0),
+                    row.get::<Option<f64>, _>("y").unwrap_or(0.0),
+                    row.get::<Option<f64>, _>("z").unwrap_or(0.0),
+                ],
+                region_id: row.get("region_id"),
+                constellation_id: row.get("constellation_id"),
+                faction_id: row.get("faction_id"),
+                distance: None,
+            };
+
+            let constellation = if let (Some(constellation_id), Some(constellation_name)) = 
+                (row.get::<Option<u32>, _>("constellation_id"), row.get::<Option<String>, _>("constellation_name")) {
+                Some(ConstellationInfo {
+                    id: constellation_id,
+                    name: constellation_name,
+                    region_id: row.get::<Option<u32>, _>("constellation_region_id").unwrap_or(0),
+                })
+            } else {
+                None
+            };
+
+            let region = if let (Some(region_id), Some(region_name)) = 
+                (row.get::<Option<u32>, _>("region_id"), row.get::<Option<String>, _>("region_name")) {
+                Some(RegionInfo {
+                    id: region_id,
+                    name: region_name,
+                })
+            } else {
+                None
+            };
+
+            Ok(Some(SystemHierarchy {
+                system,
+                constellation,
+                region,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get complete hierarchical information with all related systems and constellations
+    pub async fn get_complete_system_hierarchy(&self, system_id: u32) -> Result<Option<CompleteSystemHierarchy>> {
+        use crate::models::*;
+
+        // First get the target system
+        let target_system_row = sqlx::query(
+            "SELECT s.id, s.name as system_name, s.x, s.y, s.z, s.region_id, s.constellation_id, s.faction_id
+             FROM systems s
+             WHERE s.id = ?"
+        )
+        .bind(system_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let target_system = if let Some(row) = target_system_row {
+            SystemInfo {
+                id: row.get("id"),
+                name: row.get("system_name"),
+                center: [
+                    row.get::<Option<f64>, _>("x").unwrap_or(0.0),
+                    row.get::<Option<f64>, _>("y").unwrap_or(0.0),
+                    row.get::<Option<f64>, _>("z").unwrap_or(0.0),
+                ],
+                region_id: row.get("region_id"),
+                constellation_id: row.get("constellation_id"),
+                faction_id: row.get("faction_id"),
+                distance: None,
+            }
+        } else {
+            return Ok(None);
+        };
+
+        let target_constellation = if let Some(constellation_id) = target_system.constellation_id {
+            // Get constellation info
+            let constellation_row = sqlx::query(
+                "SELECT id, name, region_id FROM constellations WHERE id = ?"
+            )
+            .bind(constellation_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+            if let Some(constellation_row) = constellation_row {
+                // Get all systems in this constellation
+                let systems_in_constellation = sqlx::query(
+                    "SELECT id, name, x, y, z, region_id, constellation_id, faction_id
+                     FROM systems 
+                     WHERE constellation_id = ?"
+                )
+                .bind(constellation_id)
+                .fetch_all(&self.pool)
+                .await?;
+
+                let systems = systems_in_constellation.into_iter()
+                    .map(|row| SystemInfo {
+                        id: row.get("id"),
+                        name: row.get("name"),
+                        center: [
+                            row.get::<Option<f64>, _>("x").unwrap_or(0.0),
+                            row.get::<Option<f64>, _>("y").unwrap_or(0.0),
+                            row.get::<Option<f64>, _>("z").unwrap_or(0.0),
+                        ],
+                        region_id: row.get("region_id"),
+                        constellation_id: row.get("constellation_id"),
+                        faction_id: row.get("faction_id"),
+                        distance: None,
+                    })
+                    .collect();
+
+                Some(ConstellationWithSystems {
+                    id: constellation_row.get("id"),
+                    name: constellation_row.get("name"),
+                    region_id: constellation_row.get("region_id"),
+                    systems,
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let target_region = if let Some(region_id) = target_system.region_id {
+            // Get region info
+            let region_row = sqlx::query(
+                "SELECT id, name FROM regions WHERE id = ?"
+            )
+            .bind(region_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+            if let Some(region_row) = region_row {
+                // Get all constellations in this region
+                let constellations_in_region = sqlx::query(
+                    "SELECT id, name, region_id FROM constellations WHERE region_id = ?"
+                )
+                .bind(region_id)
+                .fetch_all(&self.pool)
+                .await?;
+
+                let mut constellations = Vec::new();
+                for constellation_row in constellations_in_region {
+                    let constellation_id: u32 = constellation_row.get("id");
+                    
+                    // Get all systems in this constellation
+                    let systems_in_constellation = sqlx::query(
+                        "SELECT id, name, x, y, z, region_id, constellation_id, faction_id
+                         FROM systems 
+                         WHERE constellation_id = ?"
+                    )
+                    .bind(constellation_id)
+                    .fetch_all(&self.pool)
+                    .await?;
+
+                    let systems = systems_in_constellation.into_iter()
+                        .map(|row| SystemInfo {
+                            id: row.get("id"),
+                            name: row.get("name"),
+                            center: [
+                                row.get::<Option<f64>, _>("x").unwrap_or(0.0),
+                                row.get::<Option<f64>, _>("y").unwrap_or(0.0),
+                                row.get::<Option<f64>, _>("z").unwrap_or(0.0),
+                            ],
+                            region_id: row.get("region_id"),
+                            constellation_id: row.get("constellation_id"),
+                            faction_id: row.get("faction_id"),
+                            distance: None,
+                        })
+                        .collect();
+
+                    constellations.push(ConstellationWithSystems {
+                        id: constellation_id,
+                        name: constellation_row.get("name"),
+                        region_id: constellation_row.get("region_id"),
+                        systems,
+                    });
+                }
+
+                Some(RegionWithConstellations {
+                    id: region_row.get("id"),
+                    name: region_row.get("name"),
+                    constellations,
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        Ok(Some(CompleteSystemHierarchy {
+            target_system,
+            target_constellation,
+            target_region,
+        }))
+    }
+
+    /// Get gate connections for a specific system
+    pub async fn get_system_connections(&self, system_id: u32, connection_type: Option<&str>) -> Result<Vec<GateConnection>> {
+        // Use a simpler approach without dynamic query building
+        let rows = if let Some(conn_type) = connection_type {
+            sqlx::query(
+                "SELECT id, from_system_id, to_system_id, connection_type 
+                 FROM gate_connections 
+                 WHERE (from_system_id = ? OR to_system_id = ?) AND connection_type = ?"
+            )
+            .bind(system_id)
+            .bind(system_id)
+            .bind(conn_type)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query(
+                "SELECT id, from_system_id, to_system_id, connection_type 
+                 FROM gate_connections 
+                 WHERE from_system_id = ? OR to_system_id = ?"
+            )
+            .bind(system_id)
+            .bind(system_id)
+            .fetch_all(&self.pool)
+            .await?
+        };
+
+        Ok(rows
+            .into_iter()
+            .map(|row| GateConnection {
+                id: row.get("id"),
+                from_system_id: row.get("from_system_id"),
+                to_system_id: row.get("to_system_id"),
+                connection_type: row.get("connection_type"),
+            })
+            .collect())
+    }
+
+        /// Get gate connections for multiple systems in bulk
+    pub async fn get_bulk_connections(&self, system_ids: &[u32], connection_type: Option<&str>) -> Result<Vec<SystemConnections>> {
+        if system_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let placeholders = system_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        
+        let mut query = format!(
+            "SELECT id, from_system_id, to_system_id, connection_type 
+             FROM gate_connections 
+             WHERE from_system_id IN ({}) OR to_system_id IN ({})",
+            placeholders, placeholders
+        );
+
+        if connection_type.is_some() {
+            query.push_str(" AND connection_type = ?");
+        }
+
+        let mut query_builder = sqlx::query(&query);
+        
+        // Bind system_ids twice (for from_system_id and to_system_id)
+        for &system_id in system_ids {
+            query_builder = query_builder.bind(system_id);
+        }
+        for &system_id in system_ids {
+            query_builder = query_builder.bind(system_id);
+        }
+        
+        // Bind connection_type if provided
+        if let Some(conn_type) = connection_type {
+            query_builder = query_builder.bind(conn_type);
+        }
+
+        let rows = query_builder.fetch_all(&self.pool).await?;
+
+        // Group connections by system_id
+        let mut system_connections_map: std::collections::HashMap<u32, Vec<GateConnection>> = 
+            std::collections::HashMap::new();
+
+        for row in rows {
+            let connection = GateConnection {
+                id: row.get("id"),
+                from_system_id: row.get("from_system_id"),
+                to_system_id: row.get("to_system_id"),
+                connection_type: row.get("connection_type"),
+            };
+
+            // Add to both from and to systems
+            system_connections_map
+                .entry(connection.from_system_id)
+                .or_insert_with(Vec::new)
+                .push(connection.clone());
+            
+            if connection.from_system_id != connection.to_system_id {
+                system_connections_map
+                    .entry(connection.to_system_id)
+                    .or_insert_with(Vec::new)
+                    .push(connection);
+            }
+        }
+
+        // Convert to the response format
+        let mut result = Vec::new();
+        for &system_id in system_ids {
+            let connections = system_connections_map
+                .remove(&system_id)
+                .unwrap_or_else(Vec::new);
+
+            result.push(SystemConnections {
+                system_id,
+                connections,
+            });
+        }
+
+        Ok(result)
+    }
+
+    /// Get all gate connections with pagination
+    pub async fn get_all_connections(&self, limit: usize, offset: usize, connection_type: Option<&str>) -> Result<(Vec<GateConnection>, usize)> {
+        // Get total count first
+        let total_query = if let Some(conn_type) = connection_type {
+            sqlx::query_scalar("SELECT COUNT(*) FROM gate_connections WHERE connection_type = ?")
+                .bind(conn_type)
+        } else {
+            sqlx::query_scalar("SELECT COUNT(*) FROM gate_connections")
+        };
+
+        let total_count: i64 = total_query.fetch_one(&self.pool).await?;
+
+        // Get paginated connections
+        let connections_query = if let Some(conn_type) = connection_type {
+            sqlx::query(
+                "SELECT id, from_system_id, to_system_id, connection_type 
+                 FROM gate_connections 
+                 WHERE connection_type = ?
+                 ORDER BY id
+                 LIMIT ? OFFSET ?"
+            )
+            .bind(conn_type)
+            .bind(limit as i64)
+            .bind(offset as i64)
+        } else {
+            sqlx::query(
+                "SELECT id, from_system_id, to_system_id, connection_type 
+                 FROM gate_connections 
+                 ORDER BY id
+                 LIMIT ? OFFSET ?"
+            )
+            .bind(limit as i64)
+            .bind(offset as i64)
+        };
+
+        let rows = connections_query.fetch_all(&self.pool).await?;
+
+        let connections = rows
+            .into_iter()
+            .map(|row| GateConnection {
+                id: row.get("id"),
+                from_system_id: row.get("from_system_id"),
+                to_system_id: row.get("to_system_id"),
+                connection_type: row.get("connection_type"),
+            })
+            .collect();
+
+        Ok((connections, total_count as usize))
     }
 } 

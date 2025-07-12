@@ -7,7 +7,7 @@ use std::path::Path;
 use tokio::fs;
 use sha2::{Sha256, Digest};
 
-use crate::models::{SolarSystem, Region, Constellation};
+use crate::models::{SolarSystem, Region, Constellation, ConstellationMetadata};
 use crate::database::Database;
 
 pub type Point3D = [f64; 3];
@@ -151,10 +151,14 @@ impl SpatialIndex {
         for (constellation_id, constellation_name, region_id) in db_constellations {
             // Create a minimal constellation object
             let constellation = Constellation {
-                solar_system_ids: Vec::new(), // We don't store this in DB currently
-                neighbours: Vec::new(),       // We don't store this in DB currently
+                id: constellation_id,
+                name: constellation_name.clone(),
                 region_id,
-                center: [0.0, 0.0, 0.0],     // We don't store this in DB currently
+                solar_system_ids: Vec::new(), // We don't store this in DB currently
+                metadata: ConstellationMetadata {
+                    faction_id: None,
+                    sovereignty: None,
+                },
             };
             constellations.insert(constellation_id, constellation);
             localized_names.insert(constellation_id, constellation_name);

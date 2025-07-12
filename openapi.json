@@ -128,6 +128,141 @@
         }
       }
     },
+    "/systems/connections/bulk": {
+      "get": {
+        "tags": [
+          "systems"
+        ],
+        "operationId": "systems_connections_bulk",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of connections to return (default: 1000, max: 10000)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Offset for pagination (default: 0)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "connection_type",
+            "in": "query",
+            "description": "Connection type filter (optional): stargate, jump_bridge, wormhole",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bulk gate connections with pagination",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkConnectionsResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/systems/hierarchy": {
+      "get": {
+        "tags": [
+          "systems"
+        ],
+        "operationId": "system_hierarchy",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "System ID to get hierarchy for",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "System hierarchy information (system -> constellation -> region)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemHierarchy"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "System not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/systems/hierarchy/complete": {
+      "get": {
+        "tags": [
+          "systems"
+        ],
+        "operationId": "complete_system_hierarchy",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "System ID to get hierarchy for",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete system hierarchy with all related systems and constellations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteSystemHierarchy"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "System not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
     "/systems/lookup": {
       "get": {
         "tags": [
@@ -300,6 +435,57 @@
           }
         }
       },
+      "BulkConnectionsQuery": {
+        "type": "object",
+        "properties": {
+          "connection_type": {
+            "type": "string",
+            "description": "Connection type filter (optional): stargate, jump_bridge, wormhole",
+            "nullable": true
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of connections to return (default: 1000, max: 10000)",
+            "nullable": true,
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Offset for pagination (default: 0)",
+            "nullable": true,
+            "minimum": 0
+          }
+        }
+      },
+      "BulkConnectionsResponse": {
+        "type": "object",
+        "required": [
+          "connections",
+          "total_count",
+          "offset",
+          "limit"
+        ],
+        "properties": {
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GateConnection"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
       "BulkSystemsQuery": {
         "type": "object",
         "properties": {
@@ -342,6 +528,115 @@
           },
           "total_count": {
             "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CompleteSystemHierarchy": {
+        "type": "object",
+        "required": [
+          "target_system"
+        ],
+        "properties": {
+          "target_constellation": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConstellationWithSystems"
+              }
+            ],
+            "nullable": true
+          },
+          "target_region": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RegionWithConstellations"
+              }
+            ],
+            "nullable": true
+          },
+          "target_system": {
+            "$ref": "#/components/schemas/SystemInfo"
+          }
+        }
+      },
+      "ConstellationInfo": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "region_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "region_id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ConstellationWithSystems": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "region_id",
+          "systems"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "region_id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "systems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SystemInfo"
+            }
+          }
+        }
+      },
+      "GateConnection": {
+        "type": "object",
+        "required": [
+          "id",
+          "from_system_id",
+          "to_system_id",
+          "connection_type"
+        ],
+        "properties": {
+          "connection_type": {
+            "type": "string"
+          },
+          "from_system_id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "to_system_id": {
+            "type": "integer",
+            "format": "int32",
             "minimum": 0
           }
         }
@@ -450,6 +745,108 @@
             "items": {
               "$ref": "#/components/schemas/SystemInfo"
             }
+          }
+        }
+      },
+      "RegionInfo": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "RegionWithConstellations": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "constellations"
+        ],
+        "properties": {
+          "constellations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConstellationWithSystems"
+            }
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "SystemConnections": {
+        "type": "object",
+        "required": [
+          "system_id",
+          "connections"
+        ],
+        "properties": {
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GateConnection"
+            }
+          },
+          "system_id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "SystemHierarchy": {
+        "type": "object",
+        "required": [
+          "system"
+        ],
+        "properties": {
+          "constellation": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConstellationInfo"
+              }
+            ],
+            "nullable": true
+          },
+          "region": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RegionInfo"
+              }
+            ],
+            "nullable": true
+          },
+          "system": {
+            "$ref": "#/components/schemas/SystemInfo"
+          }
+        }
+      },
+      "SystemHierarchyQuery": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "description": "System ID to get hierarchy for",
+            "minimum": 0
           }
         }
       },

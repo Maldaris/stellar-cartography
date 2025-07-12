@@ -32,6 +32,9 @@ use database::Database;
         systems::systems_autocomplete,
         systems::systems_lookup,
         systems::systems_bulk,
+        systems::system_hierarchy,
+        systems::complete_system_hierarchy,
+        systems::systems_connections_bulk,
         
         // Health endpoint
         health::health_check,
@@ -46,6 +49,15 @@ use database::Database;
             models::SystemInfo,
             models::SystemSuggestion,
             models::SystemMapData,
+            models::SystemHierarchy,
+            models::RegionInfo,
+            models::ConstellationInfo,
+            models::CompleteSystemHierarchy,
+            models::ConstellationWithSystems,
+            models::RegionWithConstellations,
+            models::GateConnection,
+            models::SystemConnections,
+            models::BulkConnectionsResponse,
             
             // Query models
             models::NearbyQuery,
@@ -53,6 +65,8 @@ use database::Database;
             models::AutocompleteQuery,
             models::SystemLookupQuery,
             models::BulkSystemsQuery,
+            models::SystemHierarchyQuery,
+            models::BulkConnectionsQuery,
             
             // Health response
             health::HealthResponse,
@@ -93,7 +107,8 @@ async fn main() -> anyhow::Result<()> {
     
     // Load spatial index with binary cache support
     info!("Loading spatial index with cache support...");
-    let spatial_index = Arc::new(SpatialIndex::load_with_cache(&db, "data/json", "data/cache/spatial_index.bin").await?);
+    let data_dir = std::env::var("EVE_FRONTIER_DATA_DIR").unwrap_or_else(|_| "../eve-frontier-tools/data/extracted".to_string());
+    let spatial_index = Arc::new(SpatialIndex::load_with_cache(&db, &data_dir, "data/cache/spatial_index.bin").await?);
     info!("Loaded {} systems into spatial index", spatial_index.system_count());
 
     // Get path prefix from environment variable
@@ -111,6 +126,9 @@ async fn main() -> anyhow::Result<()> {
         .route(&format!("{}/systems/autocomplete", path_prefix), get(systems::systems_autocomplete))
         .route(&format!("{}/systems/lookup", path_prefix), get(systems::systems_lookup))
         .route(&format!("{}/systems/bulk", path_prefix), get(systems::systems_bulk))
+        .route(&format!("{}/systems/hierarchy", path_prefix), get(systems::system_hierarchy))
+        .route(&format!("{}/systems/hierarchy/complete", path_prefix), get(systems::complete_system_hierarchy))
+        .route(&format!("{}/systems/connections/bulk", path_prefix), get(systems::systems_connections_bulk))
         .with_state(AppState {
             database: db,
             spatial_index,
