@@ -4,7 +4,7 @@ use tokio::fs;
 use tracing::{info, warn};
 use serde_json;
 use std::path::Path;
-use crate::models::{SolarSystem, Constellation, SystemHierarchy, SystemInfo, RegionInfo, ConstellationInfo, GateConnection, SystemConnections, CompleteSystemHierarchy, ConstellationWithSystems, RegionWithConstellations, SecurityInfo, CelestialInfo, NavigationInfo, SystemMetadata, ConstellationMetadata};
+use crate::models::{SolarSystem, Constellation, SystemHierarchy, SystemInfo, RegionInfo, ConstellationInfo, GateConnection, SystemConnections, CompleteSystemHierarchy, ConstellationWithSystems, RegionWithConstellations, SecurityInfo, CelestialInfo, NavigationInfo, SystemMetadata, ConstellationMetadata, TypeName, TypeNameResponse};
 
 #[derive(Clone)]
 pub struct Database {
@@ -62,6 +62,68 @@ impl Database {
             .await?;
 
         Ok(row.map(|r| r.get("name")))
+    }
+
+    pub async fn get_type_name(&self, type_id: u32) -> Result<Option<String>> {
+        let row = sqlx::query("SELECT name FROM type_names WHERE type_id = ?")
+            .bind(type_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        Ok(row.map(|r| r.get("name")))
+    }
+
+    pub async fn search_type_names(&self, query: &str, limit: usize) -> Result<TypeNameResponse> {
+        let limit = limit.min(100).max(1);
+        
+        let rows = sqlx::query(
+            "SELECT type_id, name FROM type_names 
+             WHERE LOWER(name) LIKE LOWER(?) 
+             ORDER BY name ASC 
+             LIMIT ?"
+        )
+        .bind(format!("%{}%", query))
+        .bind(limit as i32)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let type_names: Vec<TypeName> = rows
+            .into_iter()
+            .map(|row| TypeName {
+                type_id: row.get::<i32, _>("type_id") as u32,
+                name: row.get("name"),
+            })
+            .collect();
+
+        let total_found = type_names.len();
+
+        Ok(TypeNameResponse {
+            type_names,
+            query: query.to_string(),
+            total_found,
+        })
+    }
+
+    pub async fn get_all_type_names(&self, limit: usize, offset: usize) -> Result<Vec<TypeName>> {
+        let rows = sqlx::query(
+            "SELECT type_id, name FROM type_names 
+             ORDER BY type_id ASC 
+             LIMIT ? OFFSET ?"
+        )
+        .bind(limit as i32)
+        .bind(offset as i32)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let type_names: Vec<TypeName> = rows
+            .into_iter()
+            .map(|row| TypeName {
+                type_id: row.get::<i32, _>("type_id") as u32,
+                name: row.get("name"),
+            })
+            .collect();
+
+        Ok(type_names)
     }
 
     #[allow(dead_code)]
@@ -245,6 +307,7 @@ impl Database {
         sqlx::query("DELETE FROM systems").execute(&mut *tx).await?;
         sqlx::query("DELETE FROM constellations").execute(&mut *tx).await?;
         sqlx::query("DELETE FROM regions").execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM type_names").execute(&mut *tx).await?;
         tx.commit().await?;
 
         // Load stellar labels
@@ -415,6 +478,35 @@ impl Database {
             .duration_since(std::time::UNIX_EPOCH)?
             .as_secs();
 
+        // Load type names from extracted data
+        let mut type_names_inserted = 0;
+        let type_names_path = Path::new(data_dir).join("type_names_all.json");
+        if type_names_path.exists() {
+            info!("Loading type names from type_names_all.json...");
+            let type_names_content = fs::read_to_string(&type_names_path).await?;
+            let type_names_data: serde_json::Value = serde_json::from_str(&type_names_content)?;
+            
+            if let Some(type_names_obj) = type_names_data.as_object() {
+                info!("Found {} type names in data", type_names_obj.len());
+                
+                for (type_id_str, name_value) in type_names_obj {
+                    if let (Ok(type_id), Some(name)) = (type_id_str.parse::<u32>(), name_value.as_str()) {
+                        sqlx::query(
+                            "INSERT OR REPLACE INTO type_names (type_id, name) VALUES (?, ?)"
+                        )
+                        .bind(type_id)
+                        .bind(name)
+                        .execute(&self.pool)
+                        .await?;
+                        
+                        type_names_inserted += 1;
+                    }
+                }
+            }
+        } else {
+            warn!("Type names file not found at {:?}, skipping type names loading", type_names_path);
+        }
+
         sqlx::query(
             "INSERT OR REPLACE INTO metadata (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)"
         )
@@ -424,8 +516,8 @@ impl Database {
         .await?;
 
         info!(
-            "Database seeded successfully: {} systems, {} regions, {} constellations, {} gate connections",
-            systems_inserted, regions_inserted, constellations_inserted, connections_inserted
+            "Database seeded successfully: {} systems, {} regions, {} constellations, {} gate connections, {} type names",
+            systems_inserted, regions_inserted, constellations_inserted, connections_inserted, type_names_inserted
         );
 
         Ok(())

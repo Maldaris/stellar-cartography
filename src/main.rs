@@ -19,7 +19,7 @@ mod error;
 mod middleware;
 pub mod coordinates;
 
-use handlers::{health, systems};
+use handlers::{health, systems, type_names};
 use spatial::SpatialIndex;
 use database::Database;
 
@@ -35,6 +35,10 @@ use database::Database;
         systems::system_hierarchy,
         systems::complete_system_hierarchy,
         systems::systems_connections_bulk,
+        
+        // Type names endpoints
+        type_names::search_type_names,
+        type_names::get_type_name,
         
         // Health endpoint
         health::health_check,
@@ -58,6 +62,10 @@ use database::Database;
             models::GateConnection,
             models::SystemConnections,
             models::BulkConnectionsResponse,
+
+            // Type names models
+            models::TypeName,
+            models::TypeNameResponse,
             
             // Query models
             models::NearbyQuery,
@@ -67,6 +75,7 @@ use database::Database;
             models::BulkSystemsQuery,
             models::SystemHierarchyQuery,
             models::BulkConnectionsQuery,
+            models::TypeNameQuery,
             
             // Health response
             health::HealthResponse,
@@ -74,6 +83,7 @@ use database::Database;
     ),
     tags(
         (name = "systems", description = "Solar system spatial queries and search"),
+        (name = "type-names", description = "EVE type ID to name lookup functionality"),
         (name = "health", description = "Service health monitoring")
     ),
     info(
@@ -129,6 +139,9 @@ async fn main() -> anyhow::Result<()> {
         .route(&format!("{}/systems/hierarchy", path_prefix), get(systems::system_hierarchy))
         .route(&format!("{}/systems/hierarchy/complete", path_prefix), get(systems::complete_system_hierarchy))
         .route(&format!("{}/systems/connections/bulk", path_prefix), get(systems::systems_connections_bulk))
+        // Type names routes
+        .route(&format!("{}/type-names/search", path_prefix), get(type_names::search_type_names))
+        .route(&format!("{}/type-names/:type_id", path_prefix), get(type_names::get_type_name))
         .with_state(AppState {
             database: db,
             spatial_index,

@@ -257,4 +257,25 @@ pub struct BulkConnectionsQuery {
     pub offset: Option<usize>,
     /// Connection type filter (optional): stargate, jump_bridge, wormhole
     pub connection_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TypeName {
+    pub type_id: u32,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
+pub struct TypeNameQuery {
+    /// Search query for type names
+    pub q: String,
+    /// Maximum number of results (default: 50, max: 100)
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TypeNameResponse {
+    pub type_names: Vec<TypeName>,
+    pub query: String,
+    pub total_found: usize,
 } 

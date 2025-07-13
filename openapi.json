@@ -395,6 +395,95 @@
           }
         }
       }
+    },
+    "/type-names/search": {
+      "get": {
+        "tags": [
+          "type-names"
+        ],
+        "summary": "Search type names by query string",
+        "operationId": "search_type_names",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Search query for type names",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of results (default: 50, max: 100)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Type names matching query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TypeNameResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/type-names/{type_id}": {
+      "get": {
+        "tags": [
+          "type-names"
+        ],
+        "summary": "Get a specific type name by ID",
+        "operationId": "get_type_name",
+        "parameters": [
+          {
+            "name": "type_id",
+            "in": "path",
+            "description": "Type ID to look up",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Type name",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Type not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -963,6 +1052,64 @@
             "nullable": true
           }
         }
+      },
+      "TypeName": {
+        "type": "object",
+        "required": [
+          "type_id",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type_id": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "TypeNameQuery": {
+        "type": "object",
+        "required": [
+          "q"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of results (default: 50, max: 100)",
+            "nullable": true,
+            "minimum": 0
+          },
+          "q": {
+            "type": "string",
+            "description": "Search query for type names"
+          }
+        }
+      },
+      "TypeNameResponse": {
+        "type": "object",
+        "required": [
+          "type_names",
+          "query",
+          "total_found"
+        ],
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "total_found": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "type_names": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TypeName"
+            }
+          }
+        }
       }
     }
   },
@@ -970,6 +1117,10 @@
     {
       "name": "systems",
       "description": "Solar system spatial queries and search"
+    },
+    {
+      "name": "type-names",
+      "description": "EVE type ID to name lookup functionality"
     },
     {
       "name": "health",
