@@ -80,7 +80,7 @@ pub fn timeout_layer() -> TimeoutLayer {
 
 /// Create CORS layer with secure defaults
 pub fn cors_layer() -> CorsLayer {
-    CorsLayer::new()
+    let mut cors = CorsLayer::new()
         .allow_methods([
             axum::http::Method::GET,
             axum::http::Method::POST,
@@ -91,7 +91,19 @@ pub fn cors_layer() -> CorsLayer {
             header::AUTHORIZATION,
             header::ACCEPT,
         ])
-        .max_age(Duration::from_secs(3600))
+        .max_age(Duration::from_secs(3600));
+
+    // Add localhost:4000 as allowed origin when not in production
+    let is_production = std::env::var("PRODUCTION")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(false);
+    
+    if !is_production {
+        cors = cors.allow_origin("http://localhost:4000".parse::<HeaderValue>().unwrap());
+    }
+
+    cors
 }
 
 /// Additional security middleware for sensitive headers
